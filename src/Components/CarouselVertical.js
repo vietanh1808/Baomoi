@@ -4,6 +4,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
   useEffect,
+  useCallback,
 } from 'react'
 import {
   StyleSheet,
@@ -15,7 +16,7 @@ import {
   PanResponder,
 } from 'react-native'
 
-const WIDTH_SCREEN = Dimensions.get('window').width
+const WIDTH_WINDOW = Dimensions.get('window').width
 
 function CarouselVertical(
   {
@@ -23,18 +24,20 @@ function CarouselVertical(
     horizontal,
     height = null,
     children,
-    width = WIDTH_SCREEN,
-    auto = true,
+    width = WIDTH_WINDOW,
+    auto = false,
+    frameDrag = 3,
   },
   ref,
 ) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const interval = useRef()
-  const scrollViewRef = useRef()
+  const scrollRef = useRef()
+  const tagScreen = useRef()
 
   useImperativeHandle(ref, () => ({
     scrollToEnd() {
-      scrollViewRef.current.scrollToEnd({ animated: true })
+      scrollRef.current.scrollToEnd({ animated: true })
     },
     next() {
       handleNextElement()
@@ -51,13 +54,13 @@ function CarouselVertical(
   const handleNextElement = () => {
     setSelectedIndex((prev) => (prev >= children.length - 1 ? 0 : prev + 1))
     if (horizontal) {
-      scrollViewRef.current.scrollTo({
+      scrollRef.current.scrollTo({
         x: selectedIndex * Dimensions.get('window').width,
         y: 0,
         animated: true,
       })
     } else {
-      scrollViewRef.current.scrollTo({
+      scrollRef.current.scrollTo({
         x: 0,
         y: height * selectedIndex,
         animated: true,
@@ -73,18 +76,49 @@ function CarouselVertical(
     interval.current = id
   }
 
-  const handleScroll = (event) => {
-    if (horizontal) {
-      const layout = event.nativeEvent.layoutMeasurement.width
-      const offset = event.nativeEvent.contentOffset.x
-      const index = Math.floor(offset / layout)
-      setSelectedIndex(index)
+  const handleScrollHorizontalEnd = useCallback((event) => {
+    const layout = event.nativeEvent.layoutMeasurement.width
+    const offset = event.nativeEvent.contentOffset.x
+    const index = Math.floor(offset / layout)
+    setSelectedIndex(index)
+  }, [])
+
+  const handelScrollVerticalEnd = (event) => {
+    const offsetY = event.nativeEvent.contentOffset.y
+    const screen = event.nativeEvent.layoutMeasurement.height
+    const heightNextVerified = screen * tagScreen.current + screen / frameDrag
+    const heightPrevVerified = screen * tagScreen.current - screen / frameDrag
+
+    if (offsetY > heightNextVerified) {
+      scrollRef.current.scrollTo({
+        x: WIDTH_WINDOW,
+        y: screen * (tagScreen.current + 1),
+        animated: true,
+      })
+      setSelectedIndex(tagScreen.current + 1)
     } else {
-      const layout = height
-      const offset = event.nativeEvent.contentOffset.y
-      const index = Math.floor(offset / layout)
-      setSelectedIndex(index)
+      if (offsetY < heightPrevVerified) {
+        scrollRef.current.scrollTo({
+          x: WIDTH_WINDOW,
+          y: screen * (tagScreen.current - 1),
+          animated: true,
+        })
+        setSelectedIndex(tagScreen.current - 1)
+      } else {
+        scrollRef.current.scrollTo({
+          x: WIDTH_WINDOW,
+          y: screen * tagScreen.current,
+          animated: true,
+        })
+        setSelectedIndex(tagScreen.current)
+      }
     }
+  }
+
+  const handleScrollVerticalBegin = (event) => {
+    const screen = event.nativeEvent.layoutMeasurement.height
+    const offsetY = event.nativeEvent.contentOffset.y
+    tagScreen.current = Math.floor(offsetY / screen)
   }
 
   // Set Interval auto Scrollview When Mounted
@@ -103,12 +137,16 @@ function CarouselVertical(
       ]}
     >
       <ScrollView
-        ref={scrollViewRef}
+        ref={scrollRef}
         horizontal={horizontal}
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        onMomentumScrollEnd={handleScroll}
+        onScrollEndDrag={
+          horizontal ? handleScrollHorizontalEnd : handelScrollVerticalEnd
+        }
+        onScrollBeginDrag={handleScrollVerticalBegin}
+        decelerationRate={0}
         style={{ width: width }}
       >
         {children}

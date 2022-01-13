@@ -24,7 +24,7 @@ function HotNewsScreen() {
       >
         <CarouselVertical
           ref={scrollviewRef}
-          horizontal={false}
+          horizontal={true}
           height={40}
           width={300}
           auto={false}
